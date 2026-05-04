@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sword, Zap, Shield, Heart, Ghost, Target, AlertCircle, Crosshair, Skull, DoorOpen, Brain, Play, Pause, Trophy, Book } from 'lucide-react';
-import { Character, Beast, Element, Skill } from '../types';
+import { Sword, Zap, Shield, Heart, Ghost, Target, AlertCircle, Crosshair, Skull, DoorOpen, Brain, Play, Pause, Trophy } from 'lucide-react';
+import { Character, Beast, Element } from '../types';
 import { RACE_DATA, ELEMENTAL_CHART } from '../constants';
 import CharacterAvatar from './CharacterAvatar';
 import { sounds } from '../lib/sounds';
@@ -59,7 +59,6 @@ export default function Combat({ playerParty, enemyParty, allBeasts = [], rightH
   const [turn, setTurn] = useState(0); // 0 = Player Team, 1 = Enemy Team
   const [activeUnitIndex, setActiveUnitIndex] = useState(0);
   const [logs, setLogs] = useState<string[]>(['Battle started!']);
-  const [showSkills, setShowSkills] = useState(false);
 
   // Extract team passives from deployed units
   const pPassives = useMemo(() => calculatePassives(playerParty || [], rightHandManId), [playerParty, rightHandManId]);
@@ -401,82 +400,6 @@ export default function Combat({ playerParty, enemyParty, allBeasts = [], rightH
       addFloatingValue(damage, false, false, mult > 1 ? "ASCENDED POWER!" : mult < 1 ? "INEFFECTIVE" : undefined);
       addLog(`${attacker.name} casts ${attackerElem} burst on ${defender?.name} for ${damage} damage!`);
       setIsAttacking(null);
-      if (newEHealth.every(h => h === 0)) {
-        checkWinCondition(newEHealth);
-      } else {
-        nextActiveUnit();
-      }
-    }, 400);
-  };
-  
-  const handleSkill = (attackerIndex: number, targetIndex: number, skill: Skill) => {
-    if (turn !== 0 || isAttacking !== null) return;
-    const attacker = playerParty[attackerIndex];
-    const defender = enemyParty[targetIndex];
-
-    if (!attacker || !defender || eHealth[targetIndex] <= 0 || pHealth[attackerIndex] <= 0) return;
-    if (!('stats' in attacker) || !('mp' in attacker.stats)) return;
-
-    const cost = skill.cost || 0;
-    if (pMana[attackerIndex] < cost) {
-      addLog("Not enough Mana!");
-      return;
-    }
-
-    setIsAttacking(attackerIndex);
-    sounds.playSpell();
-    
-    setTimeout(() => {
-      const attacker = playerParty[attackerIndex] as Character;
-      const defender = enemyParty[targetIndex];
-      
-      const attackerElem = getUnitElement(attacker);
-      const defenderElem = defender ? getUnitElement(defender) : 'Normal' as Element;
-      const mult = getElementalMultiplier(attackerElem, defenderElem);
-      
-      let rawInt = attacker.stats.int;
-      rawInt += getPassiveBonus(attacker, false);
-
-      let rawDef = 'stats' in defender ? defender.stats.def : 5;
-      if (defender && 'equippedBeastId' in defender && defender.equippedBeastId) {
-         const dBeast = allBeasts.find(b => b.id === defender.equippedBeastId);
-         if (dBeast) rawDef += Math.floor(dBeast.stats.def / 2);
-      }
-      if (defender) {
-         rawDef += getPassiveBonus(defender, true);
-      }
-      
-      // Damage formula for skills
-      const skillPower = skill.power || 10;
-      const baseDamage = Math.max(1, (rawInt + skillPower - Math.floor(rawDef / 3)) * (0.8 + Math.random() * 0.4));
-      const damage = Math.max(1, Math.floor(baseDamage * mult));
-      
-      const newEHealth = [...eHealth];
-      newEHealth[targetIndex] = Math.max(0, newEHealth[targetIndex] - damage);
-      setEHealth(newEHealth);
-      
-      const newPMana = [...pMana];
-      newPMana[attackerIndex] -= cost;
-      setPMana(newPMana);
-      
-      const elementalColors: Record<string, string> = {
-        'Fire': 'bg-red-500',
-        'Water': 'bg-blue-500',
-        'Earth': 'bg-amber-800',
-        'Wind': 'bg-emerald-400',
-        'Light': 'bg-yellow-200',
-        'Dark': 'bg-purple-600',
-        'Void': 'bg-indigo-900',
-        'Normal': 'bg-slate-400'
-      };
-
-      triggerShake(15);
-      sounds.playHit();
-      addParticles(75, 30 + targetIndex * 15, 15, elementalColors[attackerElem] || 'bg-blue-400', 'magic');
-      addFloatingValue(damage, false, false, mult > 1 ? "SUPER EFFECTIVE!" : mult < 1 ? "RESISTED" : undefined);
-      addLog(`${attacker.name} uses ${skill.name} on ${defender?.name} for ${damage} damage!`);
-      setIsAttacking(null);
-      setShowSkills(false);
       if (newEHealth.every(h => h === 0)) {
         checkWinCondition(newEHealth);
       } else {
@@ -938,31 +861,14 @@ export default function Combat({ playerParty, enemyParty, allBeasts = [], rightH
                 </div>
 
                 <div className={`flex flex-wrap items-center justify-center gap-4 transition-all duration-700 ${isAuto ? 'opacity-30 grayscale pointer-events-none scale-95 blur-[2px]' : 'opacity-100 scale-100'}`}>
-                  {playerParty[activeUnitIndex] && !showSkills && (
+                  {playerParty[activeUnitIndex] && (
                     <div className="flex flex-wrap justify-center gap-3">
                       <ActionButton icon={Sword} label="Strike" color="bg-gradient-to-br from-red-500 to-red-600 shadow-red-900/40" onClick={() => handleAttack(activeUnitIndex, selectedTarget)} />
-                      <ActionButton icon={Book} label="Skills" color="bg-gradient-to-br from-purple-500 to-purple-600 shadow-purple-900/40" onClick={() => setShowSkills(true)} />
+                      <ActionButton icon={Zap} label="Arcane" color="bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-900/40" onClick={() => handleSpell(activeUnitIndex, selectedTarget)} />
                       {('equippedBeastId' in playerParty[activeUnitIndex]) && (playerParty[activeUnitIndex] as any).equippedBeastId && (
                         <ActionButton icon={Ghost} label="Soul Link" color="bg-gradient-to-br from-amber-500 to-amber-600 shadow-amber-900/40" onClick={() => handleBeastStrike(activeUnitIndex, selectedTarget)} />
                       )}
                       <ActionButton icon={Crosshair} label="Capture" color="bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-900/40" onClick={() => handleCapture(activeUnitIndex, selectedTarget)} />
-                    </div>
-                  )}
-                  {showSkills && (
-                    <div className="flex flex-col items-center gap-2">
-                       <button onClick={() => setShowSkills(false)} className="text-xs text-slate-400 mb-2">Back</button>
-                       <div className="flex flex-wrap justify-center gap-3">
-                        {(playerParty[activeUnitIndex] as Character).skills?.filter(s => s.type === 'Active').map(skill => (
-                          <ActionButton 
-                            key={skill.name} 
-                            icon={Zap} 
-                            label={`${skill.name} (${skill.cost} MP)`} 
-                            color="bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-900/40" 
-                            onClick={() => handleSkill(activeUnitIndex, selectedTarget, skill)} 
-                            disabled={pMana[activeUnitIndex] < (skill.cost || 0)}
-                          />
-                        ))}
-                       </div>
                     </div>
                   )}
                   <div className="hidden sm:block w-[1px] h-10 bg-white/10 mx-2" />

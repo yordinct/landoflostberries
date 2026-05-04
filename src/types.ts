@@ -15,15 +15,6 @@ export type Screen = 'Menu' | 'Creation' | 'Map' | 'Base' | 'Squad' | 'Bestiary'
 
 export type CharacterRole = 'Worker' | 'Soldier' | 'Guard' | 'Scout' | 'Unassigned';
 
-export interface Skill {
-  name: string;
-  description: string;
-  power?: number;
-  effect?: string;
-  cost?: number;
-  type: 'Active' | 'Passive';
-}
-
 export interface Character {
   id: string;
   name: string;
@@ -45,7 +36,6 @@ export interface Character {
     spd: number;
     cha: number;
   };
-  skills: Skill[];
   personality: string;
   backstory: string;
   loyalty: number;
@@ -164,7 +154,6 @@ export interface PlayerState {
     food: number;
     mana: number;
     wood: number;
-
     stone: number;
   };
   squad: Character[]; // Full character objects for persistence

@@ -1,4 +1,4 @@
-import { Race, Class, Element, Rarity, Region, Beast, Character, Skill } from './types';
+import { Race, Class, Element, Rarity, Region, Beast, Character } from './types';
 import { 
   Sword, Shield, Wand, Zap, Flame, Droplets, Wind, Mountain, 
   Moon, Sun, Ghost, Heart, Star, Sparkles, Brain, Compass, 
@@ -10,53 +10,6 @@ import {
 export const RACES: Race[] = ['Human', 'Elf', 'Dark Elf', 'Beastkin', 'Dragonborn', 'Fairy-blooded', 'Dwarf', 'Celestial', 'Demonkin', 'Ancient Bloodline'];
 export const CLASSES: Class[] = ['Mage', 'Spellblade', 'Beast Tamer', 'Healer', 'Assassin', 'Knight', 'Summoner', 'Ranger', 'Alchemist', 'Necromancer', 'Royal Strategist'];
 export const AFFINITIES: Element[] = ['Fire', 'Water', 'Wind', 'Earth', 'Lightning', 'Ice', 'Light', 'Shadow', 'Nature', 'Blood', 'Spirit', 'Time', 'Space', 'Gravity', 'Beast', 'Ancient'];
-
-export const CLASS_SKILLS: Record<Class, Skill[]> = {
-  'Mage': [
-    { name: 'Fireball', description: 'Hurls a ball of fire at an enemy.', power: 20, cost: 10, type: 'Active' },
-    { name: 'Arcane Intellect', description: 'Increases Intelligence by 10%.', type: 'Passive' },
-  ],
-  'Spellblade': [
-    { name: 'Elemental Strike', description: 'Imbues weapon with elemental energy for a powerful strike.', power: 15, cost: 8, type: 'Active' },
-    { name: 'Arcane Vigor', description: 'Boosts both Strength and Intelligence by 5%.', type: 'Passive' },
-  ],
-  'Beast Tamer': [
-    { name: 'Go for the Throat!', description: 'Commands a beast to attack with increased ferocity.', power: 12, cost: 5, type: 'Active' },
-    { name: 'Pack Hunter', description: 'Increases the stats of all allied beasts.', type: 'Passive' },
-  ],
-    'Healer': [
-    { name: 'Minor Heal', description: 'Restores a small amount of HP to an ally.', power: 25, cost: 12, type: 'Active' },
-    { name: 'Mend', description: 'Passively regenerates a small amount of HP each turn.', type: 'Passive' },
-  ],
-  'Assassin': [
-    { name: 'Backstab', description: 'Deals high damage if the target has more HP.', power: 25, cost: 15, type: 'Active' },
-    { name: 'Poisoned Blade', description: 'Chance to poison the target on every attack.', effect: 'poison', type: 'Passive' },
-  ],
-  'Knight': [
-    { name: 'Shield Bash', description: 'Slams an enemy with a shield, possibly stunning them.', power: 10, cost: 7, type: 'Active' },
-    { name: 'Guardian', description: 'Increases Defense of all allies.', type: 'Passive' },
-  ],
-  'Summoner': [
-    { name: 'Summon Imp', description: 'Summons a weak demonic ally to fight for you.', cost: 20, type: 'Active' },
-    { name: 'Soul Link', description: 'Summoned creatures have increased stats.', type: 'Passive' },
-  ],
-  'Ranger': [
-    { name: 'Aimed Shot', description: 'A carefully aimed shot that deals extra damage.', power: 18, cost: 9, type: 'Active' },
-    { name: 'Survivalist', description: 'Reduces the cost of exploration and increases chances of finding rare items.', type: 'Passive' },
-  ],
-  'Alchemist': [
-    { name: 'Caustic Mixture', description: 'Throws a potion that reduces enemy defense.', effect: 'defense-down', cost: 10, type: 'Active' },
-    { name: 'Efficient Potions', description: 'Potions and other consumables have a greater effect.', type: 'Passive' },
-  ],
-  'Necromancer': [
-    { name: 'Raise Dead', description: 'Raises a fallen enemy to fight for you as an undead minion.', cost: 25, type: 'Active' },
-    { name: 'Life Tap', description: 'Drains life from enemies with each spell.', type: 'Passive' },
-  ],
-  'Royal Strategist': [
-    { name: 'Coordinated Attack', description: 'Orders all allies to attack a single target.', cost: 15, type: 'Active' },
-    { name: 'Mastermind', description: 'Increases EXP gain for the entire party.', type: 'Passive' },
-  ],
-};
 
 export const RACE_VISUALS: Record<Race, { bg: string; color: string }> = {
   'Human': { bg: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=2694&auto=format&fit=crop', color: 'bg-orange-500' },
@@ -186,8 +139,8 @@ export const REGIONS: Region[] = [
 ];
 
 export const RECRUITABLE_CHARACTERS: Character[] = [
-  { id: 'c1', name: 'Luna', race: 'Elf', class: 'Mage', affinity: 'Wind', level: 3, exp: 0, stats: { hp: 40, maxHp: 40, mp: 60, maxMp: 60, str: 5, int: 15, def: 5, spd: 10, cha: 8 }, skills: [], personality: 'Reserved', backstory: 'A scholar searching for forbidden knowledge.', loyalty: 50, role: 'Unassigned' },
-  { id: 'c2', name: 'Kael', race: 'Human', class: 'Knight', affinity: 'Earth', level: 4, exp: 0, stats: { hp: 80, maxHp: 80, mp: 20, maxMp: 20, str: 15, int: 5, def: 15, spd: 5, cha: 10 }, skills: [], personality: 'Brave', backstory: 'A former soldier seeking a new purpose.', loyalty: 60, role: 'Unassigned' }
+  { id: 'c1', name: 'Luna', race: 'Elf', class: 'Mage', affinity: 'Wind', level: 3, exp: 0, stats: { hp: 40, maxHp: 40, mp: 60, maxMp: 60, str: 5, int: 15, def: 5, spd: 10, cha: 8 }, personality: 'Reserved', backstory: 'A scholar searching for forbidden knowledge.', loyalty: 50, role: 'Unassigned' },
+  { id: 'c2', name: 'Kael', race: 'Human', class: 'Knight', affinity: 'Earth', level: 4, exp: 0, stats: { hp: 80, maxHp: 80, mp: 20, maxMp: 20, str: 15, int: 5, def: 15, spd: 5, cha: 10 }, personality: 'Brave', backstory: 'A former soldier seeking a new purpose.', loyalty: 60, role: 'Unassigned' }
 ];
 
 export const INITIAL_BEASTS: Beast[] = [
