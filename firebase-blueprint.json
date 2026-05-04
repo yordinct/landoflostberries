@@ -1,0 +1,30 @@
+{
+  "entities": {
+    "PlayerState": {
+      "title": "PlayerState",
+      "description": "Full state of a player save file",
+      "type": "object",
+      "properties": {
+        "player": { "type": "object" },
+        "baseType": { "type": "string", "enum": ["Guild", "Kingdom"] },
+        "baseLevel": { "type": "number" },
+        "resources": { "type": "object" },
+        "squad": { "type": "array" },
+        "beasts": { "type": "array" },
+        "unlockedRegions": { "type": "array" },
+        "conqueredRegions": { "type": "object" },
+        "activeQuests": { "type": "array" },
+        "completedQuests": { "type": "array" },
+        "activeMissions": { "type": "array" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["player", "baseType", "baseLevel", "resources", "squad", "beasts", "unlockedRegions", "conqueredRegions", "activeQuests", "completedQuests", "activeMissions", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/saves/{userId}/slots/{slotId}": {
+      "schema": "PlayerState",
+      "description": "Individual save slots for a user"
+    }
+  }
+}

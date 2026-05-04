@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidPlayerState(data) {
+      return data.keys().hasAll([
+        'player', 'baseType', 'baseLevel', 'resources', 'squad', 
+        'beasts', 'unlockedRegions', 'conqueredRegions', 'buildings',
+        'activeQuests', 'completedQuests', 'activeMissions', 'luck', 
+        'raceExperience', 'updatedAt'
+      ]) && data.keys().size() == 15
+         && data.player is map
+         && data.resources is map
+         && data.squad is list
+         && data.beasts is list
+         && data.unlockedRegions is list
+         && data.conqueredRegions is map
+         && data.buildings is list
+         && data.activeQuests is list
+         && data.completedQuests is list
+         && data.activeMissions is list
+         && data.baseLevel is int
+         && data.baseType is string
+         && (data.luck is int || data.luck is float)
+         && data.raceExperience is map
+         && data.updatedAt is int;
+    }
+
+    match /saves/{userId} {
+      allow read, write: if isOwner(userId) && isValidId(userId);
+      
+      match /slots/{slotId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(slotId);
+        allow create, update: if isOwner(userId) && isValidId(userId) && isValidId(slotId) 
+          && isValidPlayerState(request.resource.data);
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(slotId);
+      }
+    }
+  }
+}
