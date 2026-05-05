@@ -10,14 +10,6 @@ export const MainMenu = ({ onStart, user }: { onStart: () => void, user: any }) 
   </div>
 );
 
-// A placeholder for character creation screen
-export const CharacterCreation = ({ onComplete }: { onComplete: (data: any) => void }) => (
-  <div className="p-4">
-    <h2 className="text-2xl mb-4">Create Your Hero</h2>
-    <button onClick={() => onComplete({ name: 'Hero', race: 'Human', class: 'Knight', affinity: 'Fire' })} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Create a Default Hero</button>
-  </div>
-);
-
 // A placeholder for the world map
 export const WorldMap = ({ player, onTravel }: { player: any, onTravel: (regionId: string) => void }) => (
     <div className="p-4">

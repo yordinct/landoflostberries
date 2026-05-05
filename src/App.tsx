@@ -14,9 +14,10 @@ import { RACES, CLASSES, AFFINITIES, REGIONS, RECRUITABLE_CHARACTERS, RACE_DATA 
 import { ITEMS_DATABASE } from './items';
 import Combat from './components/Combat';
 import Inventory from './components/Inventory';
-import { MainMenu, WorldMap, NavButton } from './components/placeholders'; // MainMenu is still needed
-import { CharacterCreation } from './components/CharacterCreation'; // The REAL one
+import { MainMenu, WorldMap, NavButton } from './components/placeholders';
+import { CharacterCreation } from './components/CharacterCreation';
 import { SaveSlotsMenu } from './components/SaveSlotsMenu';
+import { BaseScreen } from './components/BaseScreen'; // Import the new component
 import { generateExplorationEvent } from './services/eventService';
 import { auth, signInWithGoogle } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -25,7 +26,7 @@ import { getCharacterRank } from './utils';
 
 // Main App Component
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('Menu');
+  const [screen, setScreen] = useState<Screen>('Menu';
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [logs, setLogs] = useState<string[]>(['Welcome to Land of Lost Berries.']);
   const [activeEnemy, setActiveEnemy] = useState<any[]>([]);
@@ -122,7 +123,7 @@ export default function App() {
                       {/* Render other screens based on state */}
                       {screen === 'Map' && <WorldMap player={player} onTravel={(r) => triggerCombat(r)} />}
                       {screen === 'Inventory' && <p>Inventory Screen</p>}
-                      {screen === 'Base' && <p>Base Screen</p>}
+                      {screen === 'Base' && <BaseScreen player={player} />} {/* Use the new component */}
                       {screen === 'Character' && <p>Character Screen</p>}
                   </div>
                  <div className="w-80 border-l border-white/5 bg-slate-900/50 p-4 flex flex-col">
