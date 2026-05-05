@@ -6,15 +6,72 @@ import {
   Crosshair, LucideIcon
 } from 'lucide-react';
 
+// --- CORE ENUMS ---
 export type Race = 'Human' | 'Elf' | 'Dark Elf' | 'Beastkin' | 'Dragonborn' | 'Fairy-blooded' | 'Dwarf' | 'Celestial' | 'Demonkin' | 'Ancient Bloodline';
 export type Class = 'Mage' | 'Spellblade' | 'Beast Tamer' | 'Healer' | 'Assassin' | 'Knight' | 'Summoner' | 'Ranger' | 'Alchemist' | 'Necromancer' | 'Royal Strategist';
 export type Element = 'Fire' | 'Water' | 'Wind' | 'Earth' | 'Lightning' | 'Ice' | 'Light' | 'Shadow' | 'Nature' | 'Blood' | 'Spirit' | 'Time' | 'Space' | 'Gravity' | 'Beast' | 'Ancient';
 export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic' | 'Ancient';
-
-export type Screen = 'Menu' | 'Creation' | 'Map' | 'Base' | 'Squad' | 'Bestiary' | 'Quests' | 'Combat' | 'Diplomacy' | 'Settings' | 'Slots' | 'Character' | 'Missions' | 'Oracle' | 'Guide' | 'League' | 'Event';
-
+export type Screen = 'Menu' | 'Creation' | 'Map' | 'Base' | 'Squad' | 'Bestiary' | 'Quests' | 'Combat' | 'Diplomacy' | 'Settings' | 'Slots' | 'Character' | 'Missions' | 'Oracle' | 'Guide' | 'League' | 'Event' | 'Inventory';
 export type CharacterRole = 'Worker' | 'Soldier' | 'Guard' | 'Scout' | 'Unassigned';
 
+// --- COMBAT & SKILLS ---
+export interface StatusEffect {
+  type: 'Poison' | 'Stun' | 'ArmorBreak' | 'AttackUp' | 'DefenseUp' | 'EvasionUp';
+  duration: number;
+  value?: number;
+}
+
+export interface Skill {
+  name: string;
+  description: string;
+  manaCost: number;
+  effect: {
+    type: 'Damage' | 'Heal' | 'Buff' | 'Debuff' | 'Stun' | 'Summon';
+    value?: number;
+    stat?: 'str' | 'def' | 'int' | 'spd' | 'cha';
+    duration?: number;
+    target: 'Self' | 'Enemy' | 'AllAllies' | 'AllEnemies' | 'Ally';
+  };
+}
+
+// --- INVENTORY & ITEMS (NEW) ---
+export type ItemType = 'Weapon' | 'Armor' | 'Accessory' | 'Consumable' | 'Material' | 'Quest';
+export type EquipmentSlot = 'Weapon' | 'Armor' | 'Accessory';
+
+interface BaseItem {
+  id: string;
+  name: string;
+  description: string;
+  type: ItemType;
+  rarity: Rarity;
+  icon?: string; // e.g., name of a Lucide icon
+}
+
+export interface Equipment extends BaseItem {
+  type: 'Weapon' | 'Armor' | 'Accessory';
+  slot: EquipmentSlot;
+  stats: Partial<Character['stats']>;
+}
+
+export interface Consumable extends BaseItem {
+  type: 'Consumable';
+  effect: {
+    type: 'HealHP' | 'HealMP' | 'CureStatus';
+    value?: number;
+  };
+}
+
+export interface Material extends BaseItem {
+  type: 'Material';
+}
+
+export interface QuestItem extends BaseItem {
+  type: 'Quest';
+}
+
+export type Item = Equipment | Consumable | Material | QuestItem;
+
+// --- CHARACTERS & FACTION ---
 export interface Character {
   id: string;
   name: string;
@@ -36,6 +93,12 @@ export interface Character {
     spd: number;
     cha: number;
   };
+  equipment?: {
+    weapon?: string; // Item ID
+    armor?: string; // Item ID
+    accessory?: string; // Item ID
+  };
+  effects?: StatusEffect[];
   personality: string;
   backstory: string;
   loyalty: number;
@@ -59,11 +122,13 @@ export interface Beast {
     def: number;
     spd: number;
   };
-  skills: string[];
+  skills: Skill[];
   bond: number;
   isDeployed?: boolean;
+  effects?: StatusEffect[];
 }
 
+// --- WORLD & PROGRESSION ---
 export interface Region {
   id: string;
   name: string;
@@ -74,23 +139,8 @@ export interface Region {
   enemies: string[];
   resources: string[];
   isConquered: boolean;
-  status: 'Peace' | 'War';
+  status: 'Peace' | 'War' | 'Neutral' | 'Ally';
   visual?: string;
-}
-
-export interface PassiveMission {
-  id: string;
-  name: string;
-  description: string;
-  duration: number; // in milliseconds
-  startTime: number;
-  assignedCharacterIds: string[];
-  type: 'Exploration' | 'resource_gathering' | 'training';
-  reward: {
-    exp: number;
-    gold: number;
-    resources?: Record<string, number>;
-  };
 }
 
 export interface Quest {
@@ -102,11 +152,11 @@ export interface Quest {
   reward: {
     gold: number;
     exp: number;
-    items?: string[];
+    items?: (Item | { itemId: string, quantity: number })[]; // Can be full items or references
   };
 }
 
-export type BuildingType = 'Barracks' | 'Market' | 'Ancient Shrine' | 'Laboratory' | 'Wall';
+export type BuildingType = 'Barracks' | 'Market' | 'Ancient Shrine' | 'Laboratory' | 'Wall' | 'Tavern' | 'Blacksmith' | 'Academy';
 
 export interface Building {
   id: string;
@@ -116,38 +166,11 @@ export interface Building {
   bonus: string;
 }
 
-export interface OracleAdvice {
-  id: string;
-  topic: string;
-  content: string;
-  timestamp: number;
-}
-
-export interface LeagueDivision {
-  captainId: string;
-  subordinateIds: string[]; // IDs of beasts or other characters
-}
-
-export interface LeagueCampaign {
-  id: string;
-  name: string;
-  type: 'War' | 'Exploration' | 'Defense' | 'Subjugation';
-  difficulty: number;
-  duration: number;
-  startTime: number;
-  assignedCaptainId: string;
-  assignedSubordinateIds: string[];
-  status: 'Pending' | 'In Progress' | 'Success' | 'Failed';
-  failReason?: string;
-  logs: string[];
-  reward: string;
-}
-
+// --- PLAYER STATE ---
 export interface PlayerState {
   player: Character;
   rightHandManId?: string;
-  rightHandManEvolved?: boolean;
-  baseType: 'Guild' | 'Kingdom';
+  baseType: 'Guild' | 'Kingdom' | 'Order' | 'Clan';
   baseLevel: number;
   resources: {
     gold: number;
@@ -156,24 +179,20 @@ export interface PlayerState {
     wood: number;
     stone: number;
   };
-  squad: Character[]; // Full character objects for persistence
-  beasts: Beast[]; // Full beast objects for persistence
+  inventory?: Item[]; // NEW
+  squad: Character[];
+  beasts: Beast[];
   unlockedRegions: string[];
-  conqueredRegions: Record<string, number>; // Region ID to Development Level
+  conqueredRegions: Record<string, number>;
   diplomacy?: Record<string, { status: 'War' | 'Peace' | 'Alliance', relation: number, intel: number }>;
   buildings: Building[];
   activeQuests: string[];
   completedQuests: string[];
-  activeMissions: PassiveMission[];
-  availableMissions?: PassiveMission[];
-  missionsRefreshedAt?: number;
+  activeMissions: any[]; // Define properly if needed
   luck: number;
   raceExperience: Record<string, { level: number, exp: number }>;
   updatedAt: number;
-  leagueDivisions?: LeagueDivision[];
-  leagueCampaigns?: LeagueCampaign[];
-  leagueCaptainsLog?: Record<string, string[]>;
-  leagueMerit?: Record<string, number>;
+  leagueDivisions?: any[]; // Define properly if needed
 }
 
 export interface SaveSlot {
