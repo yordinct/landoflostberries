@@ -2,12 +2,12 @@ import React from 'react';
 import { PlayerState } from '../types';
 import { 
   Coins, Wheat, Droplet, TreePine, Mountain, 
-  Users, Swords, Cube, Sun 
+  Users, Swords, Box, Sun // Changed Cube to Box
 } from 'lucide-react';
 
 interface Props {
   player: PlayerState;
-  onTriggerEvent: () => void; // New prop to trigger an event
+  onTriggerEvent: () => void;
 }
 
 const ResourceCard = ({ icon: Icon, label, value, color }) => (
@@ -52,7 +52,7 @@ export const BaseScreen: React.FC<Props> = ({ player, onTriggerEvent }) => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <InfoCard icon={Users} label="Squad Members" value={`${player.squad.length} / 5`} />
             <InfoCard icon={Swords} label="Active Quests" value={player.activeQuests.length} />
-            <InfoCard icon={Cube} label="Items in Armory" value={player.inventory.length} />
+            <InfoCard icon={Box} label="Items in Armory" value={player.inventory.length} /> {/* Changed Cube to Box */}
         </div>
 
         <div className="bg-slate-800/50 p-6 rounded-lg">
