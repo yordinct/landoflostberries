@@ -96,7 +96,6 @@ export default function App() {
     if (player && saveSlot !== null) {
       const interval = setInterval(() => {
         saveGameData(player, saveSlot);
-        addLog("Autosaving progress...");
       }, 30000); // Auto-save every 30 seconds
       return () => clearInterval(interval);
     }
@@ -106,6 +105,7 @@ export default function App() {
     try {
       let savedData: PlayerState | null = null;
       if (user) {
+        // Wrap dbLoad in another try catch in case it throws internally despite dbService catch
         try {
           savedData = await dbLoad(slot);
         } catch (e) {
@@ -127,6 +127,7 @@ export default function App() {
       }
 
       if (savedData) {
+        // Migration/Sanitization: ensure all required fields exist even for old saves
         const sanitizedData: PlayerState = {
           ...savedData,
           resources: {
@@ -220,12 +221,14 @@ export default function App() {
     setActiveRegion(regionId);
     setPrevScreen(screen);
     
+    // Instead of always an event, most exploration is standard combat unless it's a map alert event
     if (isEvent) {
        const event = generateExplorationEvent(regionId, player);
        setCurrentEvent(event);
        setScreen('Event');
        addLog(`Exploring ${regionId}... You encountered a rare event: ${event.title}`);
     } else {
+       // Standard region combat
        triggerCombat(regionId);
        addLog(`Exploring ${regionId}... Entering combat zone!`);
     }
@@ -237,8 +240,9 @@ export default function App() {
     
     setTimeout(() => {
       if (outcome.action === 'combat') {
-         triggerCombat(activeRegion);
+         triggerCombat(activeRegion); // Enter combat
       } else if (outcome.action === 'tame_pet') {
+         // Add pet
          const newBeast: Beast = {
            id: 'pet_' + Date.now(),
            name: outcome.payload.species,
@@ -310,14 +314,17 @@ export default function App() {
     const region = REGIONS.find(r => r.id === regionId);
     if (!region) return;
 
+    // Calculate Average Player Level
     const squad = player?.squad || [];
     const avgPlayerLevel = Math.max(1, Math.floor(((player?.player.level || 1) + squad.reduce((acc, s) => acc + (s.level || 1), 0)) / (1 + squad.length)));
     
+    // Multiplier for enemy stats if map is higher level
     let multiplier = 1;
     if (region.difficulty > avgPlayerLevel) {
        multiplier = Math.max(1, Math.floor(region.difficulty / avgPlayerLevel));
     }
 
+    // Create a squad of enemies
     const enemies = (region.enemies || []).map(name => ({
       id: 'enemy_' + Math.random(),
       name: multiplier > 1 ? `Enhanced ${name} LV${region.difficulty * multiplier}` : name,
@@ -334,6 +341,7 @@ export default function App() {
       element: name.includes('Wolf') ? 'Wind' : name.includes('Slime') ? 'Water' : (name.includes('Dragon') ? 'Fire' : 'Earth')
     }));
 
+    // Assemble Player Party (Hero + Active Squad + Deployed Beasts)
     const squadParty = (player?.squad || []);
     const deployedBeasts = (player?.beasts || []).filter(b => b.isDeployed);
     const fullParty = [player!.player, ...squadParty, ...deployedBeasts];
@@ -349,12 +357,14 @@ export default function App() {
     const newStats = { ...char.stats };
     let unspent = char.unspentStatPoints || 0;
     
+    // Allow multi-level ups
     while (true) {
       const levelUpExp = newLevel * 100 * 1.5;
       if (newExp >= levelUpExp) {
         newExp -= levelUpExp;
         newLevel += 1;
         unspent += 3;
+        // Moderate stat gains per level
         newStats.maxHp += 15;
         newStats.hp = newStats.maxHp;
         newStats.maxMp += 5;
@@ -377,11 +387,13 @@ export default function App() {
     let newLevel = beast.level;
     const newStats = { ...beast.stats };
     
+    // Allow multi-level ups
     while (true) {
-      const levelUpExp = newLevel * 80 * 1.2;
+      const levelUpExp = newLevel * 80 * 1.2; // Slightly easier to level beasts
       if (newExp >= levelUpExp) {
         newExp -= levelUpExp;
         newLevel += 1;
+        // Increase stats
         newStats.maxHp += 10;
         newStats.hp = newStats.maxHp;
         newStats.atk += 2;
@@ -443,12 +455,14 @@ export default function App() {
         });
       }
 
+      // Check if any enemy was a regional guardian
       const regionalEnemy = activeEnemy.find(e => e.regionId);
       let newConquered = { ...prev.conqueredRegions };
       if (regionalEnemy && regionalEnemy.regionId) {
         newConquered[regionalEnemy.regionId] = Math.max(newConquered[regionalEnemy.regionId] || 0, 1);
       }
 
+      // Split EXP between all active party members (Hero, Squad, Deployed Beasts)
       const deployedBeastsCount = (prev.beasts || []).filter(b => b.isDeployed).length;
       const totalParticipants = 1 + (prev.squad?.length || 0) + deployedBeastsCount;
       const expShare = Math.floor((Number(loot.exp) || 0) / totalParticipants);
@@ -524,11 +538,13 @@ export default function App() {
     addLog(`${building.type} upgraded to Level ${building.level + 1}!`);
   };
 
+  // Passive Resource Generation based on Conquered Regions
   useEffect(() => {
     if (!player) return;
     const interval = setInterval(() => {
       setIncomeTimer(prev => {
         if (prev <= 1) {
+          // Trigger Income
           setPlayer(p => {
             if (!p) return null;
             let incomeGold = 0;
@@ -545,7 +561,7 @@ export default function App() {
                 if (region.resources.includes('Food')) incomeFood += lv * 5;
                 if (region.resources.includes('Wood')) incomeWood += lv * 5;
                 if (region.resources.includes('Stone')) incomeStone += lv * 5;
-                if (region.resources.includes('Mana Crystals')) incomeGold += lv * 2;
+                if (region.resources.includes('Mana Crystals')) incomeGold += lv * 2; // Extra value
               }
             });
 
@@ -563,7 +579,7 @@ export default function App() {
               }
             };
           });
-          return 60;
+          return 60; // Reset to 60s
         }
         return prev - 1;
       });
@@ -576,6 +592,7 @@ export default function App() {
     const cost = (player.baseLevel + 1) * 500;
     const woodCost = (player.baseLevel + 1) * 150;
     const stoneCost = (player.baseLevel + 1) * 100;
+    // Lowered the requirement so they don't get stuck thinking base level blocks player level
     const reqLevel = player.baseLevel * 2;
 
     if (player.player.level < reqLevel) {
@@ -604,7 +621,7 @@ export default function App() {
   const recruitMember = (char: Character) => {
     if (!player) return;
     const barracksLevel = player.buildings.find(b => b.type === 'Barracks')?.level || 1;
-    const maxSquad = 5 + (barracksLevel * 4);
+    const maxSquad = 5 + (barracksLevel * 4); // E.g., at level 10 = 45 heroes
     
     if (player.squad.length >= maxSquad) {
       addLog(`Your current housing (Barracks Level ${barracksLevel}) only supports ${maxSquad} heroes.`);
@@ -712,6 +729,7 @@ export default function App() {
   const assignRole = (charId: string, role: CharacterRole) => {
     if (!player) return;
     
+    // Check if it's the player
     if (player.player.id === charId) {
       setPlayer({
         ...player,
@@ -721,6 +739,7 @@ export default function App() {
       return;
     }
 
+    // Update role in squad
     const updatedSquad = (player.squad || []).map(m => 
       m.id === charId ? { ...m, role } : m
     );
@@ -739,6 +758,7 @@ export default function App() {
     if (!beast) return;
 
     if (!beast.isDeployed) {
+      // Check if equipped (Soul-linked)
       const allChars = [player.player, ...(player.squad || [])];
       const isEquipped = allChars.some(c => c.equippedBeastId === beastId);
       if (isEquipped) {
@@ -747,7 +767,7 @@ export default function App() {
       }
 
       const deployedCount = (player.beasts || []).filter(b => b.isDeployed).length;
-      if (deployedCount >= 1) {
+      if (deployedCount >= 1) { // LIMIT: Only 1 active beast in squad
         addLog("Maximum of 1 active beast can be deployed from the Sanctuary!");
         return;
       }
@@ -764,6 +784,7 @@ export default function App() {
   const equipBeast = (charId: string, beastId: string | null) => {
     if (!player) return;
     
+    // Enforce exclusivity
     if (beastId) {
       const beast = (player.beasts || []).find(b => b.id === beastId);
       if (beast?.isDeployed) {
@@ -771,6 +792,7 @@ export default function App() {
         return;
       }
 
+      // Check if this beast is already linked to someone else
       const allChars = [player.player, ...(player.squad || [])];
       const alreadyLinked = allChars.find(c => c.equippedBeastId === beastId);
       if (alreadyLinked && alreadyLinked.id !== charId) {
@@ -832,6 +854,7 @@ export default function App() {
     const beast = (player.beasts || []).find(b => b.id === beastId);
     if (!beast) return;
 
+    // Balanced selling price logic
     const rarityMap: Record<string, number> = {
       'Common': 50,
       'Uncommon': 150,
@@ -846,6 +869,7 @@ export default function App() {
     const levelBonus = beast.level * 25;
     const totalValue = Math.floor(baseValue + levelBonus);
 
+    // Unequip if needed
     let updatedHero = { ...player.player };
     if (updatedHero.equippedBeastId === beastId) {
       updatedHero = { ...updatedHero, equippedBeastId: undefined };
@@ -879,6 +903,7 @@ export default function App() {
     const consumedIds = consumed.map(b => b.id);
     const baseBeast = consumed[0];
     
+    // Determine next rarity
     const rarityOrder = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic', 'Ancient'];
     const currentIdx = rarityOrder.indexOf(rarity);
     const nextRarity = rarityOrder[Math.min(currentIdx + 1, rarityOrder.length - 1)];
@@ -915,6 +940,7 @@ export default function App() {
     const beast = (player.beasts || []).find(b => b.id === beastId);
     if (!beast) return;
 
+    // Unequip if needed
     const updatedHero = { ...player.player };
     if (updatedHero.equippedBeastId === beastId) delete updatedHero.equippedBeastId;
     
@@ -983,6 +1009,7 @@ export default function App() {
   const evolveRightHand = () => {
     if (!player || !player.rightHandManId) return;
     
+    // Boost right hand man stats
     const updatedSquad = player.squad.map(sq => {
       if (sq.id === player.rightHandManId) {
         return {
@@ -1010,6 +1037,7 @@ export default function App() {
     const region = REGIONS.find(r => r.id === regionId);
     if (!region || !player) return;
     
+    // Guardian invasion should include the full active party
     const activeBeasts = (player.beasts || []).filter(b => b.isDeployed);
     const squadMembers = player.squad || [];
     const fullParty = [player.player, ...squadMembers, ...activeBeasts];
@@ -1017,7 +1045,7 @@ export default function App() {
     setActiveEnemy([{
       id: 'guardian_' + Math.random(),
       name: `Guardian of ${region.name}`,
-      regionId: region.id,
+      regionId: region.id, // For conquest tracking
       level: region.difficulty + 2,
       stats: { 
         hp: 120 + region.difficulty * 25, 
@@ -1028,7 +1056,7 @@ export default function App() {
         mp: 50,
         maxMp: 50
       },
-      element: 'Void' as any
+      element: 'Void' as any // Guardians are often Void element
     }]);
     
     setScreen('Combat');
@@ -1050,6 +1078,7 @@ export default function App() {
       });
     }
 
+    // Apply EXP to assigned characters
     const updatedSquad = (player.squad || []).map(m => {
       if (mission.assignedCharacterIds.includes(m.id)) {
         return processCharacterExp(m, mission.reward.exp);
@@ -1076,7 +1105,7 @@ export default function App() {
     const mythicPassives = ['Godly Presence', 'Reality Bender', 'Omniscience', 'Void Walker'];
     const mythicActives = ['Obliteration Ray', 'Starsurge', 'Eon Shift', 'Cataclysm'];
     
-    const ancientPassives = ['Primordial Source', 'Creator's Breath', 'Eternal Light', 'Origin Point'];
+    const ancientPassives = ['Primordial Source', 'Creator\'s Breath', 'Eternal Light', 'Origin Point'];
     const ancientActives = ['Supernova', 'Genesis', 'Omega Flare', 'Cosmic Annihilation'];
 
     const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
@@ -1093,6 +1122,7 @@ export default function App() {
       else if (rarity === 'Ancient') selectedSkills = [`${pickRandom(ancientPassives)} (Passive)`, pickRandom(ancientActives)];
     }
     
+    // Ensure the beast has all required fields for a full Beast object if it came from a simple enemy
     const newBeast: Beast = {
       id: beast.id || 'b_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       name: beast.name || 'Wild Spirit',
@@ -1160,7 +1190,7 @@ export default function App() {
         const mythicPassives = ['Godly Presence', 'Reality Bender', 'Omniscience', 'Void Walker'];
         const mythicActives = ['Obliteration Ray', 'Starsurge', 'Eon Shift', 'Cataclysm'];
         
-        const ancientPassives = ['Primordial Source', 'Creator's Breath', 'Eternal Light', 'Origin Point'];
+        const ancientPassives = ['Primordial Source', 'Creator\'s Breath', 'Eternal Light', 'Origin Point'];
         const ancientActives = ['Supernova', 'Genesis', 'Omega Flare', 'Cosmic Annihilation'];
 
         const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
@@ -1175,7 +1205,8 @@ export default function App() {
         else if (rarity === 'Ancient') selectedSkills = [`${pickRandom(ancientPassives)} (Passive)`, pickRandom(ancientActives)];
 
         const multiplier = rarityMults[rarity as string] || 1;
-        const uniqueVariance = 0.9 + (Math.random() * 0.2);
+        // Randomize base stats a bit for uniqueness
+        const uniqueVariance = 0.9 + (Math.random() * 0.2); // 0.9 to 1.1
 
         const newBeast: Beast = {
           id: 'sum_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
@@ -1231,6 +1262,7 @@ export default function App() {
       return;
     }
     
+    // Auto-select a character who is not currently busy
     const busyIds = (player.activeMissions || []).flatMap(m => m.assignedCharacterIds);
     const availableMember = player.squad.find(m => !busyIds.includes(m.id));
 
@@ -1239,6 +1271,7 @@ export default function App() {
       return;
     }
 
+    // Dynamic rewards based on role
     let rewardMult = 1.0;
     if (mission.type === 'Exploration' && availableMember.role === 'Scout') rewardMult = 1.5;
     if (mission.type === 'resource_gathering' && availableMember.role === 'Worker') rewardMult = 1.8;
@@ -1366,22 +1399,9 @@ export default function App() {
                        <Settings size={48} className="mx-auto mb-6 opacity-20" />
                        <h2 className="text-2xl font-black uppercase tracking-widest text-white mb-2">Maintenance</h2>
                        <p className="text-sm">Manage your account, saves, and system settings here.</p>
-                       <div className="mt-8 flex justify-center gap-4">
+                       <div className="mt-8">
                          <button onClick={() => setScreen('Slots')} className="px-6 py-3 bg-slate-900 border border-white/10 rounded-xl hover:bg-slate-800 transition-colors uppercase font-bold tracking-widest text-xs">
                            Manage Save Slots
-                         </button>
-                         <button 
-                           onClick={async () => {
-                             if (player && saveSlot !== null) {
-                               await saveGameData(player, saveSlot);
-                               addLog(`Game manually saved to Slot ${saveSlot}.`);
-                             } else {
-                               addLog("No active game session to save.");
-                             }
-                           }}
-                           className="px-6 py-3 bg-blue-600 border border-blue-500/50 rounded-xl hover:bg-blue-500 transition-colors uppercase font-bold tracking-widest text-xs text-white"
-                         >
-                           Save Manually
                          </button>
                        </div>
                     </div>
@@ -1909,6 +1929,7 @@ function BaseOverview({
             specialActionLabel="Summon Spirit (-500g, -10 Luck)"
           />
         ))}
+        {/* Placeholder for unbuillt buildings or future expansion */}
         <div className="h-full min-h-[300px] border-2 border-dashed border-white/5 rounded-3xl flex flex-col items-center justify-center p-8 text-center text-slate-700">
            <Plus size={48} className="mb-4 opacity-10" />
            <span className="text-xs font-black uppercase tracking-[0.2em]">New expansion slots unlocked at Base Tier 5</span>
@@ -1981,4 +2002,999 @@ function BuildingCard({ name, level, description, icon: Icon, onUpgrade, costs, 
   );
 }
 
-// ... (rest of the components are unchanged, keeping them for context)
+function WorldMap({ player, onTravel }: { player: PlayerState, onTravel: (id: string, isEvent?: boolean) => void }) {
+  const [mapAlert, setMapAlert] = useState<{ regionId: string, title: string, color: string } | null>(null);
+
+  useEffect(() => {
+    // 20% chance to generate a map alert every time the map is opened
+    if (Math.random() < 0.2) {
+      const region = REGIONS[Math.floor(Math.random() * REGIONS.length)];
+      if (player.unlockedRegions.includes(region.id)) {
+         setMapAlert({
+            regionId: region.id,
+            title: `❗ Report: Rare encounter detected in ${region.name}`,
+            color: 'amber-500'
+         });
+      }
+    }
+  }, []);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col gap-8 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between border-b border-white/5 pb-6">
+        <div>
+          <h2 className="text-4xl font-black italic uppercase tracking-tighter">Grand Map of Arcana</h2>
+          <p className="text-slate-500 text-sm font-medium tracking-wide">Selected Deployment Sector</p>
+        </div>
+        {mapAlert && (
+          <button 
+            onClick={() => onTravel(mapAlert.regionId, true)}
+            className={`bg-${mapAlert.color}/10 px-4 py-2 rounded-xl flex items-center gap-3 text-${mapAlert.color} ring-1 ring-${mapAlert.color}/20 hover:bg-${mapAlert.color} hover:text-slate-950 transition-colors pointer-events-auto`}
+          >
+             <AlertCircle size={16} className="animate-pulse" />
+             <span className="text-[10px] font-black uppercase tracking-widest">{mapAlert.title}</span>
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {REGIONS.map((region, i) => (
+          <RegionCard 
+            key={`${region.id}_${i}`} 
+            region={region} 
+            isUnlocked={player.unlockedRegions.includes(region.id)} 
+            onClick={() => onTravel(region.id)}
+            playerLevel={player.player.level}
+          />
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+function RegionCard({ region, isUnlocked, onClick, playerLevel }: any) {
+  const isLevelMet = playerLevel >= region.requiredLevel;
+  const isActuallyAvailable = isUnlocked && isLevelMet;
+
+  return (
+    <div 
+      onClick={isActuallyAvailable ? onClick : undefined}
+      className={`relative group h-80 rounded-3xl overflow-hidden cursor-pointer transition-all border border-white/5 ${
+        isActuallyAvailable ? 'scale-100 shadow-2xl hover:border-amber-500/50' : 'grayscale opacity-60 scale-[0.98] cursor-not-allowed'
+      }`}
+    >
+      <div className="absolute inset-0 bg-slate-800">
+         <div 
+           className="absolute inset-0 bg-cover opacity-30 mix-blend-overlay group-hover:scale-110 transition-transform duration-700" 
+           style={{ backgroundImage: `url(${region.visual || 'https://images.unsplash.com/photo-1506452819137-0422416856b8'})` }} 
+         />
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 p-6 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+           <div className={`p-2 rounded-lg ring-1 ring-white/10 transition-colors ${isActuallyAvailable ? 'bg-slate-900 group-hover:bg-amber-500 group-hover:text-slate-950' : 'bg-slate-950 text-slate-500'}`}>
+              {isLevelMet ? <Compass size={16} /> : <Skull size={16} />}
+           </div>
+           {!isUnlocked && <Flag size={14} className="text-rose-500 fill-rose-500" />}
+        </div>
+        <div>
+          <h4 className={`text-xl font-black italic uppercase tracking-tighter transition-colors ${isActuallyAvailable ? 'text-white' : 'text-slate-600'}`}>{region.name}</h4>
+          <div className="flex items-center gap-3">
+             <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Diff {region.difficulty}</p>
+             <span className={`text-[10px] uppercase font-black italic px-2 py-0.5 rounded ${isLevelMet ? 'text-emerald-500 bg-emerald-500/10' : 'text-rose-500 bg-rose-500/10'}`}>
+                Level {region.requiredLevel}+
+             </span>
+          </div>
+        </div>
+        {!isLevelMet && (
+          <div className="mt-2 py-1 px-2 bg-rose-500/20 border border-rose-500/30 rounded text-[9px] font-black uppercase text-rose-500 tracking-widest text-center">
+            Insufficient Power Level
+          </div>
+        )}
+        <p className="text-xs text-slate-400 line-clamp-2 mt-2 font-medium leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity">
+           {region.description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SquadManagement({ player, onRecruit, onAssignRole, onSpecialRecruit }: { player: PlayerState, onRecruit: (c: Character) => void, onAssignRole: (id: string, role: CharacterRole) => void, onSpecialRecruit?: (t: 'Exploration'|'Trade') => void }) {
+  const currentSquad = player.squad || [];
+  const available = RECRUITABLE_CHARACTERS.filter(c => !(player.squad || []).some(s => s.id === c.id));
+
+  return (
+    <div className="space-y-12 max-w-6xl mx-auto">
+       <div className="flex items-center justify-between border-b border-white/5 pb-6">
+          <div>
+            <h2 className="text-4xl font-black italic uppercase tracking-tighter">The Immortal Squad</h2>
+            <p className="text-slate-500 text-sm font-medium tracking-wide">Elite Combatants Under Your Command</p>
+          </div>
+       </div>
+
+       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <h3 className="text-xs font-black uppercase text-amber-500 tracking-[0.3em]">Current Roster</h3>
+            {currentSquad.length === 0 ? (
+               <div className="h-40 border-2 border-dashed border-white/5 rounded-3xl flex items-center justify-center text-slate-600 font-black uppercase tracking-widest italic">
+                  No active squad members found.
+               </div>
+            ) : (
+               <div className="grid md:grid-cols-2 gap-4">
+                  {currentSquad.map(char => (
+                    <MemberCard 
+                      key={char.id} 
+                      char={char} 
+                      isOwned 
+                      onAssignRole={onAssignRole}
+                      beast={char.equippedBeastId ? player.beasts?.find(b => b.id === char.equippedBeastId) : null}
+                    />
+                  ))}
+               </div>
+            )}
+          </div>
+          <div className="space-y-6">
+            <h3 className="text-xs font-black uppercase text-blue-400 tracking-[0.3em]">Active Role Buffs</h3>
+            <div className="bg-slate-900 border border-blue-500/20 rounded-3xl p-6 flex flex-col gap-4">
+               {['Worker', 'Soldier', 'Guard', 'Scout'].map(role => {
+                 const count = currentSquad.filter(c => c.role === role).length;
+                 let effect = '';
+                 if (role === 'Worker') effect = `+${count * 5}% Resource Generation`;
+                 if (role === 'Soldier') effect = `+${count * 10} Party ATK`;
+                 if (role === 'Guard') effect = `+${count * 10} Party DEF`;
+                 if (role === 'Scout') effect = `+${count * 2} Party Luck/Crit Rate`;
+                 
+                 return (
+                   <div key={role} className="flex flex-col gap-1 border-b border-white/5 pb-3 last:border-0 last:pb-0">
+                      <div className="flex justify-between items-center text-sm">
+                         <span className="font-black italic uppercase text-slate-300">{role}s ({count})</span>
+                         <span className={count > 0 ? "text-emerald-400 font-bold" : "text-slate-600 font-medium"}>
+                            {count > 0 ? 'Active' : 'Inactive'}
+                         </span>
+                      </div>
+                      <span className={`text-[10px] uppercase font-black tracking-widest ${count > 0 ? 'text-amber-500' : 'text-slate-500'}`}>
+                        {effect}
+                      </span>
+                   </div>
+                 );
+               })}
+            </div>
+          </div>
+       </div>
+
+       <div className="space-y-6">
+          <div className="flex items-center justify-between">
+             <h3 className="text-xs font-black uppercase text-slate-500 tracking-[0.3em]">Recruitment Network</h3>
+             <div className="flex gap-2">
+                <span className="px-3 py-1 bg-slate-800 text-[10px] font-black uppercase text-amber-500 rounded-full">Explore to Recruit</span>
+             </div>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-4">
+             {/* Exploration Recruit */}
+             <button 
+                onClick={() => onSpecialRecruit?.('Exploration')}
+                disabled={player.luck < 50}
+                className="bg-slate-900 border border-emerald-500/20 rounded-3xl p-6 flex flex-col items-center justify-center relative overflow-hidden group hover:border-emerald-500/50 hover:bg-slate-800 transition-all text-left disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
+             >
+                <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Globe size={32} className="mb-4 text-emerald-500 relative z-10" />
+                <h4 className="text-sm font-black uppercase tracking-widest text-emerald-500 mb-1 relative z-10">Exploration Discovery</h4>
+                <p className="text-[10px] text-slate-400 text-center px-4 mb-4 relative z-10">Use your divine luck to attract a wandering champion.</p>
+                <div className="text-[10px] uppercase font-black tracking-[0.2em] bg-emerald-500/10 text-emerald-500 px-4 py-1.5 rounded-xl border border-emerald-500/20 relative z-10">
+                   Requires 50 Luck
+                </div>
+             </button>
+             {/* Trade Route Recruit */}
+             <button 
+                onClick={() => onSpecialRecruit?.('Trade')}
+                disabled={(Number(player.resources.wood) || 0) < 1000 || (Number(player.resources.food) || 0) < 1000}
+                className="bg-slate-900 border border-blue-500/20 rounded-3xl p-6 flex flex-col items-center justify-center relative overflow-hidden group hover:border-blue-500/50 hover:bg-slate-800 transition-all text-left disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
+             >
+                <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Users size={32} className="mb-4 text-blue-500 relative z-10" />
+                <h4 className="text-sm font-black uppercase tracking-widest text-blue-500 mb-1 relative z-10">Trade Network</h4>
+                <p className="text-[10px] text-slate-400 text-center px-4 mb-4 relative z-10">Establish trade agreements to hire exotic mercenaries.</p>
+                <div className="text-[10px] uppercase font-black tracking-[0.2em] bg-blue-500/10 text-blue-500 px-4 py-1.5 rounded-xl border border-blue-500/20 relative z-10">
+                   Requires 1000 Food / Wood
+                </div>
+             </button>
+          </div>
+       </div>
+    </div>
+  );
+}
+
+function MemberCard({ char, isOwned, onRecruit, onAssignRole, beast }: any) {
+  const roles: CharacterRole[] = ['Worker', 'Soldier', 'Guard', 'Scout', 'Unassigned'];
+
+  return (
+    <div className="bg-slate-900 border border-white/5 rounded-2xl p-4 flex flex-col gap-6 hover:bg-slate-800 transition-all group">
+       <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <CharacterAvatar 
+                race={char.race} 
+                characterClass={char.class} 
+                affinity={char.affinity} 
+                size="sm" 
+              />
+              {beast && (
+                <div className="absolute -bottom-2 -right-2 bg-slate-950 rounded-full border border-amber-500/30 p-1 title={beast.name}">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">{beast.element.charAt(0)}</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                 <h4 className="font-black italic uppercase tracking-tighter text-white">{char.name}</h4>
+                 <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest">{char.class}</span>
+              </div>
+              <div className="flex gap-3 mt-1 items-center">
+                 <div className="text-[10px] font-bold text-slate-500">Tier {char.level}</div>
+                 <div className={`text-[9px] font-black uppercase tracking-widest px-1 rounded bg-black/30 ${getCharacterRank(char.level) === 'SSS' ? 'text-amber-300' : 'text-emerald-400'}`}>Rank {getCharacterRank(char.level)}</div>
+                 <div className="text-[10px] font-bold text-slate-500">R: {char.race}</div>
+              </div>
+              {beast && (
+                 <div className="text-[9px] font-black uppercase tracking-widest text-amber-500 mt-1">
+                    Equipped: <span className="text-white italic">{beast.name}</span> (Lv {beast.level})
+                 </div>
+              )}
+            </div>
+          </div>
+          {isOwned ? (
+            <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.2em] animate-pulse ${char.role !== 'Unassigned' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-950 text-slate-600'}`}>
+               {char.role}
+            </div>
+          ) : (
+            <div className="text-amber-500 font-black text-xs uppercase italic">300 G</div>
+          )}
+       </div>
+
+        {isOwned && (
+         <div className="space-y-4 pt-4 border-t border-white/5">
+            <div className="flex flex-col gap-1 w-full">
+               <div className="flex justify-between text-[8px] font-black uppercase text-slate-500">
+                  <span>Battle Experience (Level {char.level})</span>
+                  <span className="text-amber-500">{char.exp} / {char.level * 150}</span>
+               </div>
+               <div className="h-1.5 w-full bg-slate-950 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(100, (char.exp / (char.level * 150)) * 100)}%` }}
+                    className="h-full bg-gradient-to-r from-amber-600 to-amber-400"
+                  />
+               </div>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+               <Briefcase size={12} className="text-blue-400" />
+               <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Assign Active Role</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+               {roles.map(role => (
+                  <button
+                    key={role}
+                    onClick={() => onAssignRole?.(char.id, role)}
+                    className={`py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ring-1 ${char.role === role ? 'bg-blue-600 text-white shadow-lg ring-blue-500' : 'bg-white/5 text-slate-500 hover:bg-white/10 ring-white/10'}`}
+                  >
+                    {role}
+                  </button>
+               ))}
+            </div>
+         </div>
+       )}
+
+       {!isOwned && (
+         <button 
+           onClick={onRecruit}
+           className="w-full py-3 bg-white text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all transform active:scale-95"
+         >
+           Hire Member
+         </button>
+       )}
+    </div>
+  );
+}
+
+function QuestBoard({ player }: { player: PlayerState }) {
+  return (
+     <div className="max-w-4xl mx-auto space-y-8">
+       <h2 className="text-4xl font-black italic uppercase tracking-tighter">Sanctuary Mission Board</h2>
+       <div className="grid gap-4">
+          <QuestItem title="Shattered Crown Chronicles" level={1} reward="500 Gold" type="Main" icon={Trophy} />
+          <QuestItem title="Culling the Shadow Wolves" level={3} reward="1200 Gold" type="Hunt" icon={Skull} />
+          <QuestItem title="Legacy of the Fallen Stars" level={8} reward="Mythic Shard" type="Side" icon={Sparkles} />
+          <QuestItem title="Diplomatic Envoy to Elven Court" level={5} reward="Reputation" type="Recruit" icon={Users} />
+       </div>
+    </div>
+  );
+}
+
+function QuestItem({ title, level, reward, type, icon: Icon }: any) {
+  return (
+    <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 flex items-center justify-between hover:bg-slate-800 transition-all cursor-pointer group hover:ring-1 hover:ring-white/10">
+       <div className="flex items-center gap-6">
+          <div className="w-14 h-14 rounded-2xl bg-slate-950 flex items-center justify-center text-slate-600 ring-1 ring-white/10 group-hover:text-amber-500 group-hover:ring-amber-500/20 transition-all">
+             <Icon size={24} />
+          </div>
+          <div className="space-y-1">
+             <h4 className="text-lg font-black uppercase tracking-tighter italic text-slate-200 group-hover:text-white">{title}</h4>
+             <div className="flex items-center gap-4">
+                <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{type} Objective</span>
+                <span className="text-[10px] flex items-center gap-1 font-black text-slate-500 uppercase italic">Difficulty Rank {level}</span>
+             </div>
+          </div>
+       </div>
+       <div className="text-right flex flex-col items-end gap-1">
+          <div className="text-sm font-black text-emerald-400 uppercase tracking-tighter">{reward}</div>
+          <div className="text-[10px] text-slate-600 font-black uppercase tracking-[0.2em]">Pending Authorization</div>
+       </div>
+    </div>
+  );
+}
+
+function Bestiary({ player, onSell, onRelease, onToggleDeployment, onLevelUp, onAscend }: { 
+  player: PlayerState, 
+  onSell: (id: string) => void, 
+  onRelease: (id: string) => void,
+  onToggleDeployment: (id: string) => void,
+  onLevelUp: (id: string, cost: number) => void,
+  onAscend: (speciesId: string, level: number, rarity: string) => void
+}) {
+  const [filterSpecies, setFilterSpecies] = useState<string>('All');
+  const [filterLevel, setFilterLevel] = useState<string>('All');
+  const [filterRarity, setFilterRarity] = useState<string>('All');
+  const [sortBy, setSortBy] = useState<string>('Recent');
+
+  const beasts = player.beasts || [];
+  const deployedCount = beasts.filter(b => b.isDeployed).length;
+  const maxDeployed = 1;
+  
+  const speciesList = Array.from(new Set(beasts.map(b => b.species || 'Unknown')));
+  const levelList = Array.from(new Set(beasts.map(b => b.level)));
+  const rarityList = Array.from(new Set(beasts.map(b => b.rarity)));
+
+  let filteredBeasts = beasts.filter(b => {
+     if (filterSpecies !== 'All' && b.species !== filterSpecies) return false;
+     if (filterLevel !== 'All' && b.level.toString() !== filterLevel) return false;
+     if (filterRarity !== 'All' && b.rarity !== filterRarity) return false;
+     return true;
+  });
+
+  const getPower = (b: any) => b.stats.atk + Math.floor(b.stats.def * 0.5) + Math.floor(b.stats.maxHp * 0.1);
+
+  filteredBeasts = [...filteredBeasts].sort((a, b) => {
+    if (sortBy === 'Power') return getPower(b) - getPower(a);
+    if (sortBy === 'ATK') return b.stats.atk - a.stats.atk;
+    if (sortBy === 'DEF') return b.stats.def - a.stats.def;
+    if (sortBy === 'HP') return b.stats.maxHp - a.stats.maxHp;
+    if (sortBy === 'Level') return b.level - a.level;
+    return 0; // Recent or default
+  });
+
+  // Calculate ascension possibilities
+  const ascensionGroups: any = {};
+  beasts.forEach(b => {
+     if (b.isDeployed) return; // Cant ascend deployed
+     const key = `${b.species}_${b.level}_${b.rarity}`;
+     if (!ascensionGroups[key]) ascensionGroups[key] = { species: b.species, level: b.level, rarity: b.rarity, count: 0 };
+     ascensionGroups[key].count += 1;
+  });
+  
+  return (
+    <div className="max-w-6xl mx-auto space-y-8 pb-20">
+       <div className="flex items-center justify-between border-b border-white/5 pb-6">
+          <div>
+            <h2 className="text-4xl font-black italic uppercase tracking-tighter">Primal Sanctuary</h2>
+            <div className="flex items-center gap-4 mt-2">
+              <p className="text-slate-500 text-sm font-medium tracking-wide">Registry of Tamed Primal Spirits ({beasts.length} Captured)</p>
+              <div className="h-4 w-px bg-white/10" />
+              <p className="text-amber-500 text-sm font-black uppercase italic tracking-widest">{deployedCount}/{maxDeployed} Active in Squad</p>
+            </div>
+          </div>
+       </div>
+
+       {Object.values(ascensionGroups).filter((g: any) => g.count >= 10).length > 0 && (
+         <div className="bg-gradient-to-br from-amber-600 to-amber-700 rounded-3xl p-6 text-white shadow-2xl shadow-amber-600/20 flex flex-col md:flex-row gap-6 items-center justify-between">
+            <div>
+               <h3 className="text-xl font-black uppercase tracking-tighter italic flex items-center gap-2"><Sparkles /> Ascension Rite Available</h3>
+               <p className="text-xs font-medium tracking-wide mt-1">You have gathered 10 identical beasts. Ascend them into a higher rarity!</p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+               {Object.values(ascensionGroups).filter((g: any) => g.count >= 10).map((g: any, i) => (
+                 <button 
+                   key={`asc_${i}_${g.species}_${g.level}_${g.rarity}`}
+                   onClick={() => onAscend(g.species, g.level, g.rarity)}
+                   className="px-4 py-2 bg-slate-950 text-amber-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-slate-950 transition-colors shadow-lg"
+                 >
+                   Ascend 10 {g.rarity} {g.species} {g.level}s
+                 </button>
+               ))}
+            </div>
+         </div>
+       )}
+
+       <div className="flex flex-wrap gap-4 bg-slate-900 border border-white/5 p-4 rounded-2xl items-center">
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Filter By:</span>
+          
+          <select value={filterSpecies} onChange={e => setFilterSpecies(e.target.value)} className="bg-slate-950 border border-white/10 text-white text-[10px] font-black uppercase tracking-widest py-2 px-3 rounded-xl outline-none focus:border-amber-500/50">
+             <option value="All">All Species</option>
+             {speciesList.map((s, idx) => <option key={`species_${idx}_${s}`} value={s}>{s}</option>)}
+          </select>
+          
+          <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)} className="bg-slate-950 border border-white/10 text-white text-[10px] font-black uppercase tracking-widest py-2 px-3 rounded-xl outline-none focus:border-amber-500/50">
+             <option value="All">All Levels</option>
+             {levelList.sort((a,b)=>a-b).map((s, idx) => <option key={`lvl_${idx}_${s}`} value={s}>Level {s}</option>)}
+          </select>
+
+          <select value={filterRarity} onChange={e => setFilterRarity(e.target.value)} className="bg-slate-950 border border-white/10 text-white text-[10px] font-black uppercase tracking-widest py-2 px-3 rounded-xl outline-none focus:border-amber-500/50">
+             <option value="All">All Rarities</option>
+             {rarityList.map((s, idx) => <option key={`rarity_${idx}_${s}`} value={s}>{s}</option>)}
+          </select>
+          
+          <div className="h-6 w-px bg-white/10 mx-2 hidden md:block" />
+
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Sort By:</span>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="bg-slate-950 border border-white/10 text-white text-[10px] font-black uppercase tracking-widest py-2 px-3 rounded-xl outline-none focus:border-amber-500/50">
+             <option value="Recent">Recent Drop</option>
+             <option value="Power">Max Power</option>
+             <option value="ATK">Max Attack</option>
+             <option value="DEF">Max Defense</option>
+             <option value="HP">Max HP</option>
+             <option value="Level">Highest Level</option>
+          </select>
+          
+          <div className="ml-auto text-[10px] uppercase font-black tracking-widest text-slate-500">
+             Showing {filteredBeasts.length} / {beasts.length}
+          </div>
+       </div>
+       
+       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredBeasts.length === 0 ? (
+            <div className="col-span-full h-64 border-2 border-dashed border-white/5 rounded-3xl flex flex-col items-center justify-center text-slate-700">
+               <Ghost size={48} className="mb-4 opacity-10" />
+               <span className="text-xs font-black uppercase tracking-[0.2em]">Sanctuary is currently empty</span>
+               <p className="text-[10px] mt-2 text-slate-500">Capture beasts during combat to see them here.</p>
+            </div>
+          ) : (
+            filteredBeasts.map((beast, idx) => (
+                  <div key={`${beast.id}_${idx}`} className={`bg-slate-900 border transition-all rounded-3xl p-6 flex flex-col gap-6 group relative overflow-hidden ${beast.isDeployed ? 'border-amber-500/50 ring-1 ring-amber-500/20' : 'border-white/5 hover:bg-slate-800'}`}>
+                 <div className="absolute top-0 right-0 p-4 flex gap-2">
+                    {beast.isDeployed && (
+                      <span className="text-[10px] font-black uppercase text-slate-950 bg-amber-500 px-2 py-0.5 rounded border border-amber-400">Deployed</span>
+                    )}
+                    <span className="text-[10px] font-black uppercase text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">{beast.rarity}</span>
+                 </div>
+                 <div className="flex items-center gap-4">
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ring-1 transition-all ${beast.isDeployed ? 'bg-amber-500 text-slate-950 ring-amber-400' : 'bg-slate-950 text-amber-500 ring-white/10 group-hover:scale-110'}`}>
+                       <Ghost size={32} />
+                    </div>
+                    <div>
+                       <h4 className="text-xl font-black uppercase tracking-tighter italic">{beast.name || 'Unnamed Spirit'}</h4>
+                       <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">{beast.species || 'Unknown'}</span>
+                          <span className="text-[10px] font-black text-amber-500 uppercase italic">Lv {beast.level}</span>
+                       </div>
+                       <div className="w-full bg-slate-950 rounded-full h-1 mt-1 border border-white/5 overflow-hidden relative group">
+                          <motion.div 
+                             className="bg-amber-500 h-full origin-left"
+                             initial={{ width: 0 }}
+                             animate={{ width: `${Math.min(100, ((beast.exp || 0) / (beast.level * 80 * 1.2)) * 100)}%` }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900/80">
+                            <span className="text-[8px] font-bold text-amber-400">{beast.exp || 0} / {Math.floor(beast.level * 80 * 1.2)}</span>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
+                    <div className="flex flex-col gap-1">
+                       <span className="flex justify-between text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                          <span>Health</span>
+                          <span className="text-emerald-400">{beast.stats.maxHp}</span>
+                       </span>
+                       <span className="flex justify-between text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                          <span>Attack</span>
+                          <span className="text-red-400">{beast.stats.atk}</span>
+                       </span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                       <span className="flex justify-between text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                          <span>Defense</span>
+                          <span className="text-blue-400">{beast.stats.def}</span>
+                       </span>
+                       <span className="flex justify-between text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                          <span>Speed</span>
+                          <span className="text-amber-400">{beast.stats.spd}</span>
+                       </span>
+                    </div>
+                 </div>
+
+                 <div className="flex flex-wrap gap-2">
+                    {(beast.skills || []).map((skill, sIdx) => (
+                      <span key={`${skill}_${sIdx}`} className="text-[8px] font-black uppercase bg-white/5 text-slate-400 px-2 py-1 rounded-md border border-white/5">{skill}</span>
+                    ))}
+                 </div>
+
+                 <div className="space-y-2 pt-4 border-t border-white/5">
+                    <button 
+                      onClick={() => onToggleDeployment(beast.id)}
+                      className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${beast.isDeployed ? 'bg-amber-500 text-slate-950 hover:bg-amber-400' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
+                    >
+                      {beast.isDeployed ? 'Withdraw from Squad' : 'Deploy to Squad'}
+                    </button>
+                    {/* Add Level Up Button (Uses Gold based on level) */}
+                    <button 
+                      onClick={() => {
+                         const cost = beast.level * 150;
+                         if (player.resources.gold >= cost) {
+                            onLevelUp(beast.id, cost);
+                         }
+                      }}
+                      className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${player.resources.gold >= beast.level * 150 ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-slate-950' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
+                    >
+                      <TrendingUp size={12} /> Level Up (Cost: {beast.level * 150} G)
+                    </button>
+                    
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <button 
+                        onClick={() => onSell(beast.id)}
+                        className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-500/10 text-amber-500 text-xs font-black uppercase tracking-widest hover:bg-amber-500 hover:text-slate-950 transition-colors"
+                      >
+                        <Gem size={12} /> Sell ({Math.floor((beast.rarity === 'Legendary' ? 500 : beast.rarity === 'Epic' ? 250 : beast.rarity === 'Rare' ? 100 : 50) + beast.level * 25)} G)
+                      </button>
+                      <button 
+                        onClick={() => onRelease(beast.id)}
+                        className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-colors"
+                      >
+                        <DoorOpen size={12} /> Release
+                      </button>
+                    </div>
+                 </div>
+              </div>
+            ))
+          )}
+       </div>
+    </div>
+  );
+}
+
+function HeroProfile({ player, onEquipBeast, onAllocateStat }: { player: PlayerState, onEquipBeast: (charId: string, beastId: string | null) => void, onAllocateStat: (cId: string, stat: string) => void }) {
+  const [selectedCharId, setSelectedCharId] = useState(player.player.id);
+  
+  const allChars = [player.player, ...(player.squad || [])];
+  const char = allChars.find(c => c.id === selectedCharId) || player.player;
+  
+  const equippedBeast = char.equippedBeastId ? (player.beasts || []).find(b => b.id === char.equippedBeastId) : null;
+  const beasts = player.beasts || [];
+
+  const stats = [
+    { label: 'Strength', value: (char.stats.str || 0) + (equippedBeast ? Math.floor((equippedBeast.stats.atk || 0) / 2) : 0), icon: Sword, color: 'text-red-400' },
+    { label: 'Intelligence', value: (char.stats.int || 0), icon: Brain, color: 'text-blue-400' },
+    { label: 'Defense', value: (char.stats.def || 0) + (equippedBeast ? Math.floor((equippedBeast.stats.def || 0) / 2) : 0), icon: Shield, color: 'text-slate-400' },
+    { label: 'Speed', value: (char.stats.spd || 0) + (equippedBeast ? Math.floor((equippedBeast.stats.spd || 0) / 2) : 0), icon: Wind, color: 'text-emerald-400' },
+    { label: 'Charisma', value: (char.stats.cha || 0), icon: Sparkles, color: 'text-amber-400' },
+  ];
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-6xl mx-auto space-y-8 flex flex-col md:flex-row gap-8 pb-20">
+       
+       {/* Roster Sidebar */}
+       <div className="w-full md:w-64 space-y-4 shrink-0">
+          <h3 className="text-xs font-black uppercase text-slate-500 tracking-widest pl-2">Roster</h3>
+          <div className="flex flex-col gap-2">
+            {allChars.map((c, i) => (
+              <button
+                key={`${c.id}_${i}`}
+                onClick={() => setSelectedCharId(c.id)}
+                className={`flex items-center gap-3 p-3 rounded-2xl border transition-all text-left ${selectedCharId === c.id ? 'bg-amber-500/10 border-amber-500/30' : 'bg-slate-900/50 border-white/5 hover:bg-slate-800'}`}
+              >
+                <div className="w-10 h-10 shrink-0 bg-slate-950 rounded-lg flex items-center justify-center text-slate-500">
+                  <UserIcon size={18} className={selectedCharId === c.id ? 'text-amber-500' : ''} />
+                </div>
+                <div>
+                  <div className={`font-black uppercase text-sm ${selectedCharId === c.id ? 'text-amber-500' : 'text-slate-300'}`}>{c.name}</div>
+                  <div className="text-[10px] uppercase text-slate-500 font-bold">Lv {c.level} · {c.class}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+       </div>
+
+       {/* Profile Detail */}
+       <div className="flex-1 space-y-8">
+          <div className="flex flex-col md:flex-row gap-8 items-start">
+            <div className="shrink-0 flex flex-col items-center gap-4">
+              <CharacterAvatar 
+                race={char.race} 
+                characterClass={char.class} 
+                affinity={char.affinity} 
+                size="xl" 
+              />
+              <div className="text-center">
+                 <h2 className="text-3xl font-black italic uppercase tracking-tighter">{char.name}</h2>
+                 <p className="text-amber-500 font-black uppercase text-sm">{char.race} {char.class}</p>
+              </div>
+            </div>
+
+            <div className="flex-1 w-full space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest">Ascension Level</h4>
+                      <div className="flex items-center gap-3">
+                         <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded bg-black/30 ${getCharacterRank(char.level) === 'SSS' ? 'text-amber-300' : 'text-emerald-400'}`}>Rank {getCharacterRank(char.level)}</span>
+                         <span className="text-amber-500 font-black italic uppercase italic">Tier {char.level}</span>
+                      </div>
+                  </div>
+                  <div className="h-2 w-full bg-slate-900 rounded-full overflow-hidden ring-1 ring-white/5 relative">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, ((char.exp || 0) / (char.level * 100 * 1.5)) * 100)}%` }}
+                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-amber-500 to-amber-300"
+                      />
+                  </div>
+                  <div className="flex justify-between w-full text-[10px] font-black uppercase text-slate-600 tracking-widest">
+                      <span>{char.exp} EXP</span>
+                      <span>{Math.floor(char.level * 100 * 1.5 - (char.exp || 0))} EXP to Next Tier</span>
+                  </div>
+                </div>
+
+                {char.unspentStatPoints && char.unspentStatPoints > 0 ? (
+                  <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl mb-4 text-center">
+                    <span className="text-amber-500 font-bold text-xs uppercase tracking-widest">{char.unspentStatPoints} Unspent Stat Points Available</span>
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {stats.map(s => (
+                    <div key={s.label} className="bg-slate-900/50 border border-white/5 p-3 rounded-2xl flex flex-col gap-1 relative overflow-hidden group">
+                        <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${s.color}`}>
+                          <s.icon size={12} />
+                          {s.label}
+                        </div>
+                        <div className="flex items-end gap-2 justify-between">
+                          <div className="flex items-end gap-2">
+                            <span className="text-xl font-black text-white">{s.value}</span>
+                            {equippedBeast && (s.label === 'Strength' || s.label === 'Defense' || s.label === 'Speed') && (
+                              <span className="text-xs font-black text-emerald-400 mb-1">
+                                +{s.label === 'Strength' ? Math.floor((equippedBeast.stats.atk || 0) / 2) : s.label === 'Defense' ? Math.floor((equippedBeast.stats.def || 0) / 2) : Math.floor((equippedBeast.stats.spd || 0) / 2)}
+                              </span>
+                            )}
+                          </div>
+                          {char.unspentStatPoints && char.unspentStatPoints > 0 ? (
+                            <button 
+                              onClick={() => onAllocateStat(char.id, s.label)}
+                              className="w-6 h-6 rounded bg-slate-800 text-slate-300 hover:bg-amber-500 hover:text-white flex items-center justify-center font-bold transition-colors"
+                            >+</button>
+                          ) : null}
+                        </div>
+                    </div>
+                  ))}
+                </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-white/5">
+             <div className="space-y-4">
+                <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.3em]">Origins & Fate</h4>
+                <div className="bg-white/5 p-6 rounded-3xl h-full">
+                  <p className="text-sm text-slate-400 leading-relaxed font-medium italic">
+                    "{char.backstory}"
+                  </p>
+                </div>
+             </div>
+
+             <div className="space-y-4">
+                <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.3em]">Equipped Spirit</h4>
+                <div className="bg-white/5 p-4 rounded-3xl space-y-4">
+                  {equippedBeast ? (
+                    <div className="flex items-center gap-4">
+                       <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center text-amber-500 border border-amber-500/20">
+                          <Ghost size={24} />
+                       </div>
+                       <div className="flex-1">
+                          <div className="font-black uppercase italic text-lg leading-none text-white">{equippedBeast.name}</div>
+                          <div className="text-[10px] text-amber-500 font-bold uppercase">Lv {equippedBeast.level} {equippedBeast.species}</div>
+                       </div>
+                       <button 
+                         onClick={() => onEquipBeast(char.id, null)}
+                         className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 text-xs font-black uppercase tracking-widest hover:bg-red-500/20"
+                       >
+                         Unequip
+                       </button>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-500 font-medium italic flex items-center gap-3">
+                       <Shield size={16} /> No spirit equipped
+                    </div>
+                  )}
+
+                  <div className="space-y-2 pt-4 border-t border-white/5">
+                     <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Change Spirit</label>
+                     <select 
+                       className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 text-sm font-bold text-slate-300 outline-none focus:border-amber-500/50"
+                       value={equippedBeast?.id || ""}
+                       onChange={(e) => onEquipBeast(char.id, e.target.value === "" ? null : e.target.value)}
+                     >
+                       <option value="">None</option>
+                       {beasts.filter(b => (!b.isDeployed && !allChars.some(c => c.id !== char.id && c.equippedBeastId === b.id)) || b.id === char.equippedBeastId).map((b, i) => (
+                         <option key={`${b.id}_${i}`} value={b.id}>{b.name || 'Unnamed'} (Lv {b.level})</option>
+                       ))}
+                     </select>
+                  </div>
+                </div>
+             </div>
+          </div>
+
+          {RACE_DATA[char.race as Race] && (
+            <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-3xl space-y-2 mt-6">
+                <div className="flex items-center gap-2">
+                  <Star size={14} className="text-amber-500" />
+                  <h4 className="text-[10px] font-black uppercase text-amber-500 tracking-[0.3em]">Racial Ability: {RACE_DATA[char.race as Race].ability.name}</h4>
+                </div>
+                <p className="text-xs text-slate-300 font-medium">
+                  {RACE_DATA[char.race as Race].ability.description}
+                </p>
+            </div>
+          )}
+       </div>
+    </motion.div>
+  );
+}
+
+function SaveSlotsMenu({ onSelect, user }: { onSelect: (slot: number) => void, user: User | null }) {
+  const [cloudSaves, setCloudSaves] = useState<Record<number, PlayerState>>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    async function fetchCloudSaves() {
+      if (user) {
+        setLoading(true);
+        try {
+          const saves = await getAllSaves();
+          
+          // Auto-sync local saves to cloud if cloud missing
+          let synced = false;
+          for (const slot of [1, 2, 3]) {
+            if (!saves[slot]) {
+              const local = localStorage.getItem(`koa_save_slot_${slot}`);
+              if (local) {
+                try {
+                  const parsedLocal = JSON.parse(local);
+                  await dbSave(slot, parsedLocal); // wait, I imported saveGame as dbSave!
+                  saves[slot] = parsedLocal;
+                  synced = true;
+                } catch (e) {
+                   console.error('Failed to sync local save to cloud', e);
+                }
+              }
+            }
+          }
+
+          setCloudSaves(saves);
+        } catch (error) {
+          console.error("Failed to fetch cloud saves", error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    }
+    fetchCloudSaves();
+  }, [user]);
+
+  const getSlotData = (slot: number) => {
+    // If user is logged in, prefer cloud data
+    if (user && cloudSaves[slot]) {
+      return cloudSaves[slot];
+    }
+    
+    // Otherwise check local storage
+    const saved = localStorage.getItem(`koa_save_slot_${slot}`);
+    return saved ? JSON.parse(saved) : null;
+  };
+
+  const handleDelete = async (e: React.MouseEvent, slot: number) => {
+    e.stopPropagation();
+    if (confirm(`Are you sure you want to delete save slot ${slot}? This cannot be undone.`)) {
+      if (user) {
+        await dbDeleteSave(slot);
+        setCloudSaves(prev => {
+          const updated = { ...prev };
+          delete updated[slot];
+          return updated;
+        });
+      }
+      localStorage.removeItem(`koa_save_slot_${slot}`);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 flex flex-col items-center justify-center bg-slate-950 p-6"
+    >
+      <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=2684&auto=format&fit=crop')] bg-cover bg-center opacity-10 grayscale" />
+      <div className="relative z-10 w-full max-w-2xl space-y-8">
+        <div className="text-center space-y-2">
+          <h2 className="text-4xl font-black italic uppercase tracking-tighter">Chronicles of Power</h2>
+          <p className="text-slate-500 font-medium tracking-wide uppercase text-xs">Select a save slot to continue your legacy</p>
+          {loading && <div className="text-[10px] text-amber-500 font-black uppercase tracking-widest animate-pulse mt-2">Retrieving cloud chronicles...</div>}
+        </div>
+
+        <div className="grid gap-4">
+          {[1, 2, 3].map(slot => {
+            const data = getSlotData(slot);
+            return (
+              <button
+                key={slot}
+                onClick={() => onSelect(slot)}
+                className="w-full bg-slate-900 border border-white/5 p-4 rounded-3xl flex items-center justify-between hover:bg-slate-800 hover:border-amber-500/50 transition-all group overflow-hidden relative"
+              >
+                <div className="flex items-center gap-6 relative z-10">
+                   {data ? (
+                     <CharacterAvatar 
+                       race={data.player.race} 
+                       characterClass={data.player.class} 
+                       affinity={data.player.affinity} 
+                       size="md" 
+                     />
+                   ) : (
+                     <div className="w-12 h-12 bg-slate-950 rounded-2xl flex items-center justify-center font-black text-slate-700 ring-1 ring-white/10">
+                        {slot}
+                     </div>
+                   )}
+                   <div className="text-left">
+                      {data ? (
+                        <>
+                          <h4 className="text-xl font-bold text-white uppercase italic">{data.player.name}</h4>
+                          <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">
+                            Level {data.player.level} {data.player.race} {data.player.class}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <h4 className="text-xl font-bold text-slate-600 uppercase italic">Empty Chronicle</h4>
+                          <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Start a new journey</p>
+                        </>
+                      )}
+                   </div>
+                </div>
+                {data && (
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className="text-right">
+                       <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Last Updated</div>
+                       <div className="text-xs font-bold text-slate-400">{new Date(data.updatedAt).toLocaleDateString()}</div>
+                    </div>
+                    <div 
+                      onClick={(e) => handleDelete(e, slot)}
+                      className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
+                      title="Delete Save"
+                    >
+                      <Trash2 size={16} />
+                    </div>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/0 via-amber-500/0 to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-center pt-8">
+           <button 
+             onClick={() => window.location.reload()}
+             className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors"
+           >
+             Return to Main Menu
+           </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function GeminiOracle({ player, onActivateLegacy }: { player: PlayerState, onActivateLegacy: () => void }) {
+  const [advice, setAdvice] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+
+  const getOracleAdvice = async () => {
+    setLoading(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `You are the Ancient Oracle in an RPG game. 
+        The player is a ${player.player.race} ${player.player.class} level ${player.player.level}.
+        They have a squad of ${(player.squad || []).length} members.
+        Conquered regions development: ${Object.entries(player.conqueredRegions || {}).map(([id, lv]) => `${id}:Lv${lv}`).join(', ')}.
+        Resources: Gold:${player.resources.gold}, Wood:${player.resources.wood}, Stone:${player.resources.stone}.
+        Buildings: ${(player.buildings || []).map(b => `${b.type} Lv${b.level}`).join(', ')}.
+        Give a brief, mystical, and strategic advice for the next step. Max 50 words.`
+      });
+
+      setAdvice(response.text || 'The ancestors are silent for now...');
+    } catch (err) {
+      console.error(err);
+      setAdvice('The stars are obscured. Try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    getOracleAdvice();
+  }, []);
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-12 pb-20">
+       <header className="text-center space-y-4">
+          <div className="w-24 h-24 bg-purple-500/10 rounded-full mx-auto flex items-center justify-center border border-purple-500/30 shadow-2xl shadow-purple-500/20">
+             <Sparkles size={48} className="text-purple-400 animate-pulse" />
+          </div>
+          <h2 className="text-5xl font-black italic uppercase tracking-tighter text-white">The Ancient Oracle</h2>
+          <p className="text-slate-500 text-sm font-medium tracking-wide">Seeking wisdom from the bloodlines of old.</p>
+       </header>
+
+       <div className="bg-slate-900 border border-white/10 rounded-[3rem] p-12 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-purple-500/5 to-transparent pointer-events-none" />
+          
+          {loading ? (
+             <div className="text-center space-y-6">
+                <div className="flex justify-center gap-2">
+                   {[0, 1, 2].map(i => (
+                     <motion.div 
+                       key={i}
+                       animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }}
+                       transition={{ repeat: Infinity, duration: 1.5, delay: i * 0.2 }}
+                       className="w-3 h-3 bg-purple-500 rounded-full"
+                     />
+                   ))}
+                </div>
+                <p className="text-xs font-black uppercase tracking-[0.3em] text-purple-400">Consulting the Ancestors...</p>
+             </div>
+          ) : (
+             <div className="space-y-8">
+                <div className="text-2xl font-serif italic text-slate-200 leading-relaxed text-center drop-shadow-sm">
+                   "{advice}"
+                </div>
+                
+                <div className="flex justify-center gap-4">
+                   <button 
+                     onClick={getOracleAdvice}
+                     className="px-8 py-3 bg-white text-slate-950 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-purple-500 hover:text-white transition-all shadow-xl active:scale-95"
+                   >
+                      Cast the Runes Again
+                   </button>
+                   <button 
+                     disabled={player.luck < 30}
+                     onClick={onActivateLegacy}
+                     className="px-8 py-3 bg-slate-950 text-emerald-400 border border-emerald-400/30 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all shadow-xl active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
+                   >
+                      Activate Bloodline Legacy (30 Luck)
+                   </button>
+                </div>
+             </div>
+          )}
+       </div>
+
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <OracleHint icon={Sword} title="Domination" text="Conquest yields resources, but focus on the heart of the village." />
+          <OracleHint icon={Users} title="Bloodlines" text="Your squad members have hidden potential. Assign roles wisely." />
+          <OracleHint icon={Castle} title="Legacy" text="Buildings unlock tools of the ancients. The Shrine is your guide." />
+       </div>
+    </div>
+  );
+}
+
+function OracleHint({ icon: Icon, title, text }: any) {
+  return (
+    <div className="p-6 bg-slate-900/50 border border-white/5 rounded-3xl space-y-3">
+       <Icon size={18} className="text-purple-400" />
+       <h5 className="font-black uppercase tracking-widest text-xs text-white">{title}</h5>
+       <p className="text-[10px] text-slate-500 font-medium leading-relaxed">{text}</p>
+    </div>
+  );
+}
+
