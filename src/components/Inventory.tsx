@@ -1,111 +1,83 @@
-
 import React, { useState } from 'react';
-import { Character, Item, Equipment, EquipmentSlot } from '../types';
-import { Gem, Shield, Sword } from 'lucide-react';
+import { PlayerState, Item, ItemType } from '../types';
+import { ITEMS_DATABASE } from '../items';
+import { Sword, Shield, Gem, Apple, FlaskConical, Scroll } from 'lucide-react';
 
-interface InventoryProps {
-  squad: Character[];
-  inventory: Item[];
-  onEquipItem: (characterId: string, itemId: string) => void;
-  onUnequipItem: (characterId: string, slot: EquipmentSlot) => void;
+interface Props {
+  player: PlayerState;
+  onEquip: (itemId: string) => void;
+  onUse: (itemId: string) => void;
 }
 
-const RarityColor: Record<string, string> = {
-  Common: 'text-slate-400',
-  Uncommon: 'text-green-400',
-  Rare: 'text-blue-400',
-  Epic: 'text-purple-500',
-  Legendary: 'text-amber-500',
-  Mythic: 'text-red-600',
-  Ancient: 'text-yellow-300',
+const ICONS: { [key in ItemType]: React.ElementType } = {
+    Weapon: Sword,
+    Armor: Shield,
+    Accessory: Gem,
+    Consumable: Apple,
+    Material: FlaskConical,
+    Quest: Scroll
 };
 
-export default function Inventory({ squad, inventory, onEquipItem, onUnequipItem }: InventoryProps) {
-  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+export const Inventory: React.FC<Props> = ({ player, onEquip, onUse }) => {
+  const [filter, setFilter] = useState<ItemType | 'All'>('All');
 
-  const handleEquip = () => {
-    if (selectedCharacter && selectedItem && selectedItem.type.endsWith('Weapon') || selectedItem.type.endsWith('Armor') || selectedItem.type.endsWith('Accessory')) {
-      onEquipItem(selectedCharacter.id, selectedItem.id);
-      setSelectedItem(null);
-    }
-  };
+  const inventoryItems = player.inventory?.map(invItem => {
+      // This check is important if inventory stores only IDs
+      const itemDetails = ITEMS_DATABASE.find(dbItem => dbItem.id === (invItem as any).id);
+      return itemDetails || invItem;
+  }) || [];
 
-  const getEquippedItem = (character: Character, slot: EquipmentSlot): Item | undefined => {
-      const itemId = character.equipment?.[slot.toLowerCase() as 'weapon' | 'armor' | 'accessory'];
-      if (!itemId) return undefined;
-      return inventory.find(item => item.id === itemId);
-  }
+  const filteredItems = filter === 'All' 
+    ? inventoryItems 
+    : inventoryItems.filter(item => item.type === filter);
 
   return (
-    <div className="h-full w-full flex flex-col p-6 bg-slate-950 text-white font-mono">
-      <header className="flex items-center justify-between pb-4 border-b border-white/10">
-        <h1 className="text-2xl font-black italic uppercase tracking-tighter">Armory & Inventory</h1>
-      </header>
+    <div className="p-6 animate-fade-in">
+        <header className="mb-6">
+            <h1 className="text-4xl font-bold text-white">Armory & Inventory</h1>
+            <p className="text-lg text-slate-400">Manage your items and equipment.</p>
+        </header>
 
-      <div className="flex-1 flex gap-6 mt-6 overflow-hidden">
-        {/* Squad & Equipment Panel */}
-        <div className="w-1/2 flex flex-col gap-4 bg-slate-900/50 p-4 rounded-xl border border-white/5">
-          <h2 className="text-lg font-bold uppercase tracking-wider text-amber-400">Your Squad</h2>
-          <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-            {squad.map(char => (
-              <div 
-                key={char.id}
-                onClick={() => setSelectedCharacter(char)}
-                className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${selectedCharacter?.id === char.id ? 'border-blue-500 bg-blue-500/10' : 'border-slate-700 hover:border-slate-500'}`}>
-                <p className="font-bold text-lg">{char.name} <span className="text-xs text-slate-400">Lvl {char.level} {char.class}</span></p>
-                <div className="flex gap-4 mt-2 text-xs">
-                  {['Weapon', 'Armor', 'Accessory'].map(slot => {
-                      const equipped = getEquippedItem(char, slot as EquipmentSlot);
-                      return (
-                        <div key={slot} className="flex-1 bg-slate-800/70 p-2 rounded-md flex items-center gap-2">
-                            {slot === 'Weapon' && <Sword size={16} className="text-slate-400"/>}
-                            {slot === 'Armor' && <Shield size={16} className="text-slate-400"/>}
-                            {slot === 'Accessory' && <Gem size={16} className="text-slate-400"/>}
-                            <div>
-                                <p className="font-bold text-slate-400">{slot}</p>
-                                {equipped ? 
-                                  <p className={`font-semibold ${RarityColor[equipped.rarity]}`}>{equipped.name}</p> : 
-                                  <p className="text-slate-500">- Empty -</p>}
+        <div className="flex items-center space-x-2 mb-4 overflow-x-auto">
+            <button onClick={() => setFilter('All')} className={`px-4 py-2 text-sm rounded-md ${filter === 'All' ? 'bg-blue-600 text-white' : 'bg-slate-700'}`}>All</button>
+            {Object.keys(ICONS).map(type => (
+                <button key={type} onClick={() => setFilter(type as ItemType)} className={`px-4 py-2 text-sm rounded-md ${filter === type ? 'bg-blue-600 text-white' : 'bg-slate-700'}`}>
+                    {type}
+                </button>
+            ))}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredItems.length > 0 ? filteredItems.map(item => {
+                const Icon = ICONS[item.type];
+                return (
+                    <div key={item.id} className="bg-slate-800 border border-slate-700 rounded-lg p-4 flex flex-col">
+                        <div className="flex items-start mb-2">
+                            <Icon className="w-6 h-6 mr-3 text-yellow-400" />
+                            <div className="flex-1">
+                                <h3 className="font-bold text-white">{item.name}</h3>
+                                <p className="text-xs text-slate-400">{item.rarity} {item.type}</p>
                             </div>
                         </div>
-                      );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+                        <p className="text-sm text-slate-300 flex-1 mb-3">{item.description}</p>
+                        <div className="mt-auto">
+                            {(item.type === 'Weapon' || item.type === 'Armor' || item.type === 'Accessory') && (
+                                <button onClick={() => onEquip(item.id)} className="w-full px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700">
+                                    Equip
+                                </button>
+                            )}
+                            {item.type === 'Consumable' && (
+                                <button onClick={() => onUse(item.id)} className="w-full px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600">
+                                    Use
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                );
+            }) : (
+                <p className="text-slate-400 italic col-span-full">No items of this type in your inventory.</p>
+            )}
         </div>
-
-        {/* Inventory Items Panel */}
-        <div className="w-1/2 flex flex-col gap-4 bg-slate-900/50 p-4 rounded-xl border border-white/5">
-          <h2 className="text-lg font-bold uppercase tracking-wider text-amber-400">Inventory</h2>
-          <div className="flex-1 overflow-y-auto pr-2 space-y-2">
-            {inventory.length > 0 ? inventory.map(item => (
-              <div 
-                key={item.id}
-                onClick={() => setSelectedItem(item)}
-                className={`p-2 rounded-lg border-2 flex justify-between items-center transition-all cursor-pointer ${selectedItem?.id === item.id ? 'border-green-500 bg-green-500/10' : 'border-slate-800 hover:border-slate-600'}`}>
-                <div>
-                  <p className={`font-bold ${RarityColor[item.rarity]}`}>{item.name}</p>
-                  <p className="text-xs text-slate-400">{item.type} - {item.rarity}</p>
-                </div>
-              </div>
-            )) : <p className="text-center text-slate-500 pt-10">Your inventory is empty.</p>}
-          </div>
-           {selectedCharacter && selectedItem && (
-            <div className="mt-auto pt-4 border-t border-white/5">
-              <p className="text-center text-sm mb-2">Assign <span className={`font-bold ${RarityColor[selectedItem.rarity]}`}>{selectedItem.name}</span> to <span className="font-bold text-blue-400">{selectedCharacter.name}</span>?</p>
-              <button 
-                onClick={handleEquip}
-                disabled={!selectedCharacter || !selectedItem || !('slot' in selectedItem)}
-                className="w-full py-3 bg-green-600 text-white font-bold uppercase tracking-wider rounded-lg hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 transition-all">
-                Equip Item
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
